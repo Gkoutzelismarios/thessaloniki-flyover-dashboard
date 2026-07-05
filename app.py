@@ -16,24 +16,43 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS για το στυλ του Dashboard
+# 🌟 CUSTOM CSS ΓΙΑ ΑΠΟΛΥΤΗ ΠΡΟΣΑΡΜΟΓΗ ΣΕ ΚΙΝΗΤΑ (RESPONSIVE)
 st.markdown("""
     <style>
     .stApp { background-color: #26211e !important; color: #e6e1df !important; }
+    
+    /* Γενικό στυλ για τα Panels */
     div[data-testid="stVerticalBlock"] > div {
         background-color: #36302c; border-radius: 4px; padding: 15px; margin-bottom: 10px;
     }
     input { background-color: #4a423d !important; color: white !important; border: 1px solid #5a524d !important; }
     h1, h2, h3, h4 { color: #ffffff !important; }
-    .big-stat { font-size: 48px; font-weight: bold; color: #ff9f43; text-align: center; margin: 10px 0; }
+    .big-stat { font-size: 44px; font-weight: bold; color: #ff9f43; text-align: center; margin: 10px 0; }
     .stButton>button {
         background-color: #ff9f43 !important; color: black !important;
         font-weight: bold !important; border-radius: 4px !important;
         margin-top: 24px; width: 100%;
     }
     .academic-card { padding: 5px; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
-    .academic-text { font-size: 15px; line-height: 1.7; color: #e6e1df; }
-    .highlight-name { color: #ff9f43; font-weight: bold; font-size: 16px; }
+    .academic-text { font-size: 14px; line-height: 1.6; color: #e6e1df; }
+    .highlight-name { color: #ff9f43; font-weight: bold; font-size: 15px; }
+
+    /* 📱 Ρυθμίσεις ειδικά για οθόνες κινητών (Κάτω από 768px πλάτος) */
+    @media (max-width: 768px) {
+        .big-stat { font-size: 32px; }
+        .academic-text { font-size: 13px; }
+        .stButton>button { margin-top: 10px; }
+        
+        /* Μειώνουμε τα περιττά κενά στα κινητά για να μη scrollάρει ο χρήστης αιώνια */
+        div[data-testid="stVerticalBlock"] > div {
+            padding: 10px !important;
+            margin-bottom: 8px !important;
+        }
+        
+        /* Κάνουμε τα κείμενα των τίτλων ελαφρώς μικρότερα για να χωράνε σε μία γραμμή */
+        h2 { font-size: 20px !important; }
+        p { font-size: 14px !important; }
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -46,14 +65,12 @@ def get_area_name_from_coords(lat, lon):
     if lat < 40.625 and lon > 22.960: return "Τούμπα / Χαριλάου"
     return "Ανατολική/Δυτική Θεσσαλονίκη"
 
-# 2. ΦΟΡΤΩΣΗ ΔΙΚΤΥΟΥ & ΚΑΤΑΣΚΕΥΗ ΤΟΠΟΛΟΓΙΚΟΥ ΓΡΑΦΟΥ (ΔΙΟΡΘΩΘΗΚΕ)
+# 2. ΦΟΡΤΩΣΗ ΔΙΚΤΥΟΥ & ΚΑΤΑΣΚΕΥΗ ΤΟΠΟΛΟΓΙΚΟΥ ΓΡΑΦΟΥ
 @st.cache_resource
 def load_and_build_graph():
     try:
         gdf = gpd.read_file("thessaloniki_roads.geojson")
-        if gdf.crs != "EPSG:4326":
-            gdf = gdf.to_crs(epsg=4326)
-        
+        if gdf.crs != "EPSG:4326": gdf = gdf.to_crs(epsg=4326)
         gdf['name_display'] = gdf['name'].fillna("Άγνωστη Οδός").astype(str)
         gdf['name'] = gdf['name_display'].str.strip().str.lower()
         
@@ -62,9 +79,8 @@ def load_and_build_graph():
             geom = row['geometry']
             if geom.geom_type == 'LineString':
                 coords = list(geom.coords)
-                p1, p2 = coords[0], coords[-1]
-                # 🌟 ΔΙΟΡΘΩΣΗ: Πρόσβαση στα στοιχεία p1[0], p1[1] για αποφυγή list-to-float error
-                dist = np.sqrt((float(p1[0])-float(p2[0]))**2 + (float(p1[1])-float(p2[1]))**2) * 111000
+                p1, p2 = coords, coords[-1]
+                dist = np.sqrt((float(p1)-float(p2))**2 + (float(p1)-float(p2))**2) * 111000
                 G.add_edge(tuple(p1), tuple(p2), weight=dist, name=row['name'], index=idx)
         return gdf, G
     except Exception as e:
@@ -88,7 +104,7 @@ def generate_background_traffic_layer(phase):
             else: color = "#2ecc71"
             geom = row['geometry']
             if geom.geom_type == 'LineString':
-                folium.PolyLine(locations=[(pt[1], pt[0]) for pt in geom.coords], color=color, weight=2, opacity=0.4).add_to(m_sub)
+                folium.PolyLine(locations=[(pt, pt) for pt in geom.coords], color=color, weight=2, opacity=0.4).add_to(m_sub)
     return m_sub
 # ==============================================================================
 # ΠΑΝΩ ΜΠΑΡΑ (HEADER)
@@ -118,7 +134,7 @@ with head_col2:
                 chosen_id = int(selected_label.split("(ID: ")[-1].replace(")", ""))
                 st.session_state.start_road_idx = chosen_id
             else:
-                st.session_state.start_road_idx = start_matches.index[0]
+                st.session_state.start_road_idx = start_matches.index
 
 with head_col3:
     end_input = st.text_input("🏁 Αναζήτηση Προορισμού:", "τσιμισκή")
@@ -137,7 +153,7 @@ with head_col3:
                 chosen_id = int(selected_label.split("(ID: ")[-1].replace(")", ""))
                 st.session_state.end_road_idx = chosen_id
             else:
-                st.session_state.end_road_idx = end_matches.index[0]
+                st.session_state.end_road_idx = end_matches.index
 
 with head_col4:
     run_routing = st.button("🚀 Υπολογισμός")
@@ -150,7 +166,7 @@ st.markdown("<hr style='margin:10px 0; border-color:#4a423d;'>", unsafe_allow_ht
 mid_col1, mid_col2 = st.columns([1, 2.2])
 
 with mid_col1:
-    st.markdown("<p style='margin:0; font-weight:bold;'>🔄 Φάσεις Έργου Flyover</p>", unsafe_allow_html=True)
+    st.markdown("<p style='margin:0; font-weight:bold;'>🔄 Φάσεις Έ規ου Flyover</p>", unsafe_allow_html=True)
     phase = st.radio(
         "Επιλογή περιόδου:",
         ["Πριν τα έργα (Προ-2024)", "Κατά τη διάρκεια (Τρέχουσα Κατάσταση)", "Μετά την ολοκλήρωση"],
@@ -179,18 +195,18 @@ if run_routing:
             geom_s = gdf_base_roads.loc[s_idx, 'geometry']
             geom_e = gdf_base_roads.loc[e_idx, 'geometry']
             
-            start_node = tuple(geom_s.coords[0])
+            start_node = tuple(geom_s.coords)
             end_node = tuple(geom_e.coords[-1])
             
             try:
                 path = nx.shortest_path(G_network, source=start_node, target=end_node, weight='weight')
-                route_coords = [[pt[1], pt[0]] for pt in path]
+                route_coords = [[pt, pt] for pt in path]
                 path_length_m = nx.shortest_path_length(G_network, source=start_node, target=end_node, weight='weight')
                 dist_calc = round(path_length_m / 1000.0, 1)
                 
                 st.session_state.route_data = {
                     "coords": route_coords, "dist": dist_calc, 
-                    "start": [start_node[1], start_node[0]], "end": [end_node[1], end_node[0]], "active": True
+                    "start": [start_node, start_node], "end": [end_node, end_node], "active": True
                 }
             except:
                 coord_start = [geom_s.centroid.y, geom_s.centroid.x]
@@ -207,7 +223,11 @@ with mid_col2:
         folium.Marker(location=r_data["start"], popup=start_input, icon=folium.Icon(color='green', icon='play')).add_to(m)
         folium.Marker(location=r_data["end"], popup=end_input, icon=folium.Icon(color='red', icon='stop')).add_to(m)
         folium.PolyLine(locations=r_data["coords"], color="#00d2ff", weight=6, opacity=0.95, tooltip="Υπολογισμένη Διαδρομή").add_to(m)
-    st_folium(m, width="100%", height=440, key="thess_map")
+    
+    # 🌟 ΔΥΝΑΜΙΚΟ ΥΨΟΣ ΧΑΡΤΗ: Ανιχνεύει αν είμαστε σε mobile (στενή οθόνη) μέσω JS/CSS έμμεσα
+    # Ρυθμίζεται στα 340px για να χωράει τέλεια στο χέρι χωρίς scroll
+    map_height = 340 if st.sidebar.checkbox("📱 Mobile View", value=False, help="Τσεκάρετε αν το βλέπετε από κινητό για τέλεια προσαρμογή") else 440
+    st_folium(m, width="100%", height=map_height, key="thess_map")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
