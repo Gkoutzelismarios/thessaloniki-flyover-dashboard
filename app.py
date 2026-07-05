@@ -52,10 +52,9 @@ def get_area_name_from_coords(lat, lon):
     if lat < 40.625 and lon > 22.960: return "Τούμπα / Χαριλάου"
     return "Θεσσαλονίκη"
 
-# 🗺️ 2. ΕΠΙΣΤΗΜΟΝΙΚΗ ΓΕΩΧΩΡΙΚΗ ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ ΟΔΙΚΟΥ ΔΙΚΤΥΟΥ (ΕΝΣΩΜΑΤΩΜΕΝΗ)
+# 🗺️ 2. ΕΠΙΣΤΗΜΟΝΙΚΗ ΓΕΩΧΩΡΙΚΗ ΒΑΣΗ ΔΕΔΟΜΕΝΩΝ (ΕΝΣΩΜΑΤΩΜΕΝΗ & ΔΙΟΡΘΩΜΕΝΗ)
 @st.cache_resource
 def build_autonomous_network():
-    # Καθαρά γεωγραφικά τμήματα των κυριότερων αξόνων της Θεσσαλονίκης [Lat, Lon]
     roads_data = {
         0: {"name_display": "Εγνατία (Δυτικά)", "name": "εγνατια", "coords": [[40.6415, 22.9320], [40.6395, 22.9360], [40.6375, 22.9400]], "type": "Λεωφόρος"},
         1: {"name_display": "Εγνατία (Κέντρο)", "name": "εγνατια", "coords": [[40.6375, 22.9400], [40.6355, 22.9440], [40.6335, 22.9480]], "type": "Λεωφόρος"},
@@ -69,13 +68,13 @@ def build_autonomous_network():
         9: {"name_display": "Περιφερειακή Οδός (Flyover Zone)", "name": "περιφερειακη οδος", "coords": [[40.6550, 22.9400], [40.6400, 22.9580], [40.6210, 22.9680]], "type": "Αυτοκινητόδρομος"}
     }
     
-    # Κατασκευή τοπολογικού γράφου NetworkX αυτόματα από τις συντεταγμένες των δρόμων
     G = nx.Graph()
     for idx, data in roads_data.items():
         pts = data["coords"]
-        # Συνδέουμε την αρχή και το τέλος του κάθε τμήματος δρόμου
-        p1, p2 = tuple(pts), tuple(pts[-1])
-        dist = np.sqrt((p1-p2)**2 + (p1-p2)**2) * 111000
+        p1 = tuple(pts[0])
+        p2 = tuple(pts[-1])
+        # 🌟 ΔΙΟΡΘΩΣΗ: Πρόσβαση με δείκτες [0] και [1] για σωστό υπολογισμό απόστασης
+        dist = np.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2) * 111000
         G.add_edge(p1, p2, weight=dist, name=data["name"], index=idx)
         
     return roads_data, G
@@ -92,12 +91,10 @@ def generate_background_traffic_layer(phase):
             base_speed = np.random.randint(15, 70)
             live_speed = base_speed * 0.55 if phase == "Κατά τη διάρκεια (Τρέχουσα Κατάσταση)" else (base_speed * 1.25 if phase == "Μετά την ολοκλήρωση" else base_speed)
             color = "#e74c3c" if live_speed < 22 else ("#f39c12" if live_speed < 40 else "#2ecc71")
-            
-            # Σχεδίαση της πραγματικής γεωμετρίας του δρόμου
             folium.PolyLine(locations=data["coords"], color=color, weight=3, opacity=0.45).add_to(m_sub)
     return m_sub
 # ==============================================================================
-# ΠΑΝΩ ΜΠΑΡΑ (HEADER) - Διαχείριση Αναζήτησης
+# ΠΑΝΩ ΜΠΑΡΑ (HEADER)
 # ==============================================================================
 head_col1, head_col2, head_col3, head_col4 = st.columns([1.4, 1.1, 1.1, 0.8])
 
@@ -118,9 +115,9 @@ with head_col2:
                 selected = st.selectbox("👉 Ποιο τμήμα εννοείτε;", labels, key="start_box")
                 st.session_state.start_road_idx = int(selected.split("(ID: ")[-1].replace(")", ""))
             else:
-                st.session_state.start_road_idx = matches
+                st.session_state.start_road_idx = matches[0]
         else:
-            st.session_state.start_road_idx = 0 # Default Fallback
+            st.session_state.start_road_idx = 5
 
 with head_col3:
     end_input = st.text_input("🏁 Αναζήτηση Προορισμού:", "τσιμισκή")
@@ -133,9 +130,9 @@ with head_col3:
                 selected = st.selectbox("👉 Ποιο τμήμα εννοείτε;", labels, key="end_box")
                 st.session_state.end_road_idx = int(selected.split("(ID: ")[-1].replace(")", ""))
             else:
-                st.session_state.end_road_idx = matches
+                st.session_state.end_road_idx = matches[0]
         else:
-            st.session_state.end_road_idx = 3 # Default Fallback
+            st.session_state.end_road_idx = 3
 
 with head_col4:
     run_routing = st.button("🚀 Υπολογισμός")
@@ -168,24 +165,24 @@ if run_routing:
             pts_s = roads_db[s_idx]["coords"]
             pts_e = roads_db[e_idx]["coords"]
             
-            node_s = tuple(pts_s)
+            node_s = tuple(pts_s[0])
             node_e = tuple(pts_e[-1])
             
             try:
                 path = nx.shortest_path(G_network, source=node_s, target=node_e, weight='weight')
                 route_coords = []
                 for pt in path:
-                    route_coords.append([pt, pt])
+                    route_coords.append([pt[0], pt[1]])
                 
                 path_len = nx.shortest_path_length(G_network, source=node_s, target=node_e, weight='weight')
                 dist_calc = round(path_len / 1000.0, 1)
-                if dist_calc == 0: dist_calc = round(np.sqrt((node_s-node_e)**2 + (node_s-node_e)**2)*111, 1)
+                if dist_calc == 0: 
+                    dist_calc = round(np.sqrt((node_s[0]-node_e[0])**2 + (node_s[1]-node_e[1])**2)*111, 1)
                 
                 st.session_state.route_data = {"coords": route_coords, "dist": dist_calc, "start": list(node_s), "end": list(node_e), "active": True}
             except:
-                # Fallback αν τα τμήματα δεν τέμνονται άμεσα
                 route_coords = pts_s + pts_e
-                st.session_state.route_data = {"coords": route_coords, "dist": 3.8, "start": pts_s, "end": pts_e[-1], "active": True}
+                st.session_state.route_data = {"coords": route_coords, "dist": 3.8, "start": pts_s[0], "end": pts_e[-1], "active": True}
 
 with mid_col2:
     m = generate_background_traffic_layer(phase)
@@ -196,7 +193,7 @@ with mid_col2:
         folium.PolyLine(locations=r_data["coords"], color="#00d2ff", weight=6, opacity=0.95).add_to(m)
         
     map_height = 340 if st.sidebar.checkbox("📱 Mobile View", value=False) else 440
-    st_folium(m, width="100%", height=map_height, key="thess_map")
+    st_folium(m, width="100%", height=440, key="thess_map")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
